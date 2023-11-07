@@ -1,3 +1,10 @@
+##########################################################################################################
+# Name: Johnathan Harrison
+# OSU Email: harrijo9@oregonstate.edu
+# Course: CS361
+# Assignment: Term Project
+##########################################################################################################
+
 import tkinter as tk
 from tkinter import ttk
 from tkinter import Frame
@@ -351,14 +358,14 @@ ttk.Style().configure("TableTitle.TFrame", background="white")
 ttk.Style().configure(
     "Title.TLabel",
     font=("Helvetica", 23, "bold"),
-    padding=(10, 5, 40, 5),
+    padding=(5, 5, 40, 5),
     background="white",
     foreground="black",  # Active label text color
     width=20,
     anchor="w",
 )
 
-table_title.pack(side="left", fill="none", expand=True)
+table_title.pack(side="left", fill="none", expand=False)
 
 # Create a button for adding an entry
 add_entry_button = ttk.Button(
