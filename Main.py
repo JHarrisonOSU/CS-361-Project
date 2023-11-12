@@ -6,194 +6,133 @@
 ##########################################################################################################
 
 import tkinter as tk
+import requests
 from tkinter import ttk
 from tkinter import Frame
 from tkinter import font
 from random import randint, uniform
 from datetime import datetime, timedelta
+from typing import Any, Callable
 
 
-# Function to spawn medication addition popup
-def open_add_window(medication="", dosage="", frequency="", start_date="", end_date=""):
-    entry_frame = ttk.Frame(meds_frame, style="Popup.TFrame")
-    entry_frame.place(relx=0.5, rely=0.5, anchor="center")
-    entry_frame["padding"] = (10, 10)
-
-    add_window_label = ttk.Label(
-        entry_frame, text="Add New Medication", style="PopupTitle.TLabel"
-    )
-
-    medication_label = ttk.Label(entry_frame, text="Medication:")
-    medication_entry = ttk.Entry(entry_frame)
-    medication_entry.insert(0, medication)
-
-    dosage_label = ttk.Label(entry_frame, text="Dosage:")
-    dosage_entry = ttk.Entry(entry_frame)
-    dosage_entry.insert(0, dosage)
-
-    frequency_label = ttk.Label(entry_frame, text="Frequency:")
-    frequency_entry = ttk.Entry(entry_frame)
-    frequency_entry.insert(0, frequency)
-
-    start_date_label = ttk.Label(entry_frame, text="Start Date:")
-    start_date_entry = ttk.Entry(entry_frame)
-    start_date_entry.insert(0, start_date)
-
-    end_date_label = ttk.Label(entry_frame, text="End Date:")
-    end_date_entry = ttk.Entry(entry_frame)
-    end_date_entry.insert(0, end_date)
-
-    add_window_label.grid(row=0, column=0, columnspan=2, padx=5, pady=10)
-
-    medication_label.grid(row=1, column=0, padx=5, pady=5, sticky="w")
-    medication_entry.grid(row=1, column=1, padx=5, pady=5)
-
-    dosage_label.grid(row=2, column=0, padx=5, pady=5, sticky="w")
-    dosage_entry.grid(row=2, column=1, padx=5, pady=5)
-
-    frequency_label.grid(row=3, column=0, padx=5, pady=5, sticky="w")
-    frequency_entry.grid(row=3, column=1, padx=5, pady=5)
-
-    start_date_label.grid(row=4, column=0, padx=5, pady=5, sticky="w")
-    start_date_entry.grid(row=4, column=1, padx=5, pady=5)
-
-    end_date_label.grid(row=5, column=0, padx=5, pady=5, sticky="w")
-    end_date_entry.grid(row=5, column=1, padx=5, pady=5)
-
-    submit_button = ttk.Button(
-        entry_frame,
-        text="Submit",
-        command=lambda: add_new_entry(
-            entry_frame,
-            medication_entry.get(),
-            dosage_entry.get(),
-            frequency_entry.get(),
-            start_date_entry.get(),
-            end_date_entry.get(),
-        ),
-    )
-
-    cancel_button = ttk.Button(
-        entry_frame, text="Cancel", command=lambda: close_entry_window(entry_frame)
-    )
-
-    cancel_button.grid(row=6, column=1, padx=30, pady=10)
-    submit_button.grid(row=6, column=0, padx=5, pady=10)
-
-
-# Function to spawn medication update popup
-def open_update_window(
-    medication="", dosage="", frequency="", start_date="", end_date=""
+# Function to spawn medication addition/update popup
+def open_entry_window(
+    title: str, fields: dict[str:Any], submit_action: Callable, meds_frame: Frame
 ):
+    # Create a new frame popup form to allow user's to enter/edit data
     entry_frame = ttk.Frame(meds_frame, style="Popup.TFrame")
-    entry_frame.place(relx=0.5, rely=0.5, anchor="center")
+    entry_frame.place(
+        relx=0.5,
+        rely=0.5,
+        anchor="center",  # Position it to center of main window (not sidebar)
+    )
     entry_frame["padding"] = (10, 10)
 
-    add_window_label = ttk.Label(
-        entry_frame, text="Update Medication", style="PopupTitle.TLabel"
-    )
+    # Create a title for the popup form
+    window_label = ttk.Label(entry_frame, text=title, style="PopupTitle.TLabel")
+    window_label.grid(row=0, column=0, columnspan=2, padx=5, pady=10)
 
-    medication_label = ttk.Label(entry_frame, text="Medication:")
-    medication_entry = ttk.Entry(entry_frame)
-    medication_entry.insert(0, medication)
+    # Populate the form fields and values via iterating through the passed dict
+    entries = {}
+    for i, (field, value) in enumerate(fields.items()):
+        label = ttk.Label(entry_frame, text=f"{field}:")
+        entry = ttk.Entry(entry_frame)
+        entry.insert(0, value)
+        entries[field] = entry
 
-    dosage_label = ttk.Label(entry_frame, text="Dosage:")
-    dosage_entry = ttk.Entry(entry_frame)
-    dosage_entry.insert(0, dosage)
+        # Place them into a tk grid
+        label.grid(row=i + 1, column=0, padx=5, pady=5, sticky="w")
+        entry.grid(row=i + 1, column=1, padx=5, pady=5)
 
-    frequency_label = ttk.Label(entry_frame, text="Frequency:")
-    frequency_entry = ttk.Entry(entry_frame)
-    frequency_entry.insert(0, frequency)
-
-    start_date_label = ttk.Label(entry_frame, text="Start Date:")
-    start_date_entry = ttk.Entry(entry_frame)
-    start_date_entry.insert(0, start_date)
-
-    end_date_label = ttk.Label(entry_frame, text="End Date:")
-    end_date_entry = ttk.Entry(entry_frame)
-    end_date_entry.insert(0, end_date)
-
-    add_window_label.grid(row=0, column=0, columnspan=2, padx=5, pady=10)
-
-    medication_label.grid(row=1, column=0, padx=5, pady=5, sticky="w")
-    medication_entry.grid(row=1, column=1, padx=5, pady=5)
-
-    dosage_label.grid(row=2, column=0, padx=5, pady=5, sticky="w")
-    dosage_entry.grid(row=2, column=1, padx=5, pady=5)
-
-    frequency_label.grid(row=3, column=0, padx=5, pady=5, sticky="w")
-    frequency_entry.grid(row=3, column=1, padx=5, pady=5)
-
-    start_date_label.grid(row=4, column=0, padx=5, pady=5, sticky="w")
-    start_date_entry.grid(row=4, column=1, padx=5, pady=5)
-
-    end_date_label.grid(row=5, column=0, padx=5, pady=5, sticky="w")
-    end_date_entry.grid(row=5, column=1, padx=5, pady=5)
-
+    # Create cancel and submit buttons, attaching the appropriate action command
     submit_button = ttk.Button(
-        entry_frame,
-        text="Submit",
-        command=lambda: update_entry(
-            entry_frame,
-            medication_entry.get(),
-            dosage_entry.get(),
-            frequency_entry.get(),
-            start_date_entry.get(),
-            end_date_entry.get(),
-        ),
+        entry_frame, text="Submit", command=lambda: submit_action(entry_frame, entries)
     )
-
     cancel_button = ttk.Button(
         entry_frame, text="Cancel", command=lambda: close_entry_window(entry_frame)
     )
 
-    cancel_button.grid(row=6, column=1, padx=30, pady=10)
-    submit_button.grid(row=6, column=0, padx=5, pady=10)
+    # Position the buttons in the grid
+    cancel_button.grid(row=len(fields) + 1, column=1, padx=30, pady=10)
+    submit_button.grid(row=len(fields) + 1, column=0, padx=5, pady=10)
 
 
-# Function to add a new row to table
-def add_new_entry(entry_frame, medication, dosage, frequency, start_date, end_date):
+# Function to call open_entry_window in add mode
+def add_new_medication():
+    # Fields for a new medication entry
+    fields = {
+        "Medication": "",
+        "Dosage": "",
+        "Frequency": "",
+        "Start Date": "",
+        "End Date": "",
+    }
+
+    open_entry_window(
+        "Add New Medication",
+        fields,
+        lambda ef, e: add_entry_submit(ef, e),
+        meds_frame,
+    )
+
+
+# Function to call open_entry_window in update mode
+def edit_selected_medication():
+    selected_item = tree.selection()
+    if not selected_item:
+        return  # No item selected
+
+    values = tree.item(selected_item, "values")
+    fields = {
+        "Medication": values[1],
+        "Dosage": values[2],
+        "Frequency": values[3],
+        "Start Date": values[4],
+        "End Date": values[5],
+    }
+
+    open_entry_window(
+        "Update Medication",
+        fields,
+        lambda ef, e: update_entry_submit(ef, e),
+        meds_frame,
+    )
+
+
+# Function to close a particular frame, called by add_entry and update_entry_submit
+def close_entry_window(entry_frame):
+    entry_frame.destroy()
+
+
+# Function to add a new row to table, called by open_entry_window()
+def add_entry_submit(entry_frame, entries):
+    medication = entries["Medication"].get()
+    dosage = entries["Dosage"].get()
+    frequency = entries["Frequency"].get()
+    start_date = entries["Start Date"].get()
+    end_date = entries["End Date"].get()
+
     tree.insert(
         "", "end", values=["", medication, dosage, frequency, start_date, end_date]
     )
     close_entry_window(entry_frame)
 
 
-# Function to close a particular frame
-def close_entry_window(entry_frame):
-    entry_frame.destroy()
-
-
-# Function to edit a selected row's data, calls open_update_window on button press
-def edit_selected_medication():
+# Function to update a row's data, called by open_entry_window on submit
+def update_entry_submit(entry_frame, entries):
     selected_item = tree.selection()
     if not selected_item:
         return  # No item selected
-    values = tree.item(selected_item, "values")
-    print("Selected item:", selected_item)
-    print("Values:", values)  # Print the values being passed
-    open_update_window(
-        medication=values[1],
-        dosage=values[2],
-        frequency=values[3],
-        start_date=values[4],
-        end_date=values[5],
-    )
 
+    medication = entries["Medication"].get()
+    dosage = entries["Dosage"].get()
+    frequency = entries["Frequency"].get()
+    start_date = entries["Start Date"].get()
+    end_date = entries["End Date"].get()
 
-# Function to update a row's data, called by open_update_window on submission
-def update_entry(entry_frame, medication, dosage, frequency, start_date, end_date):
-    selected_item = tree.selection()
-
-    if not selected_item:
-        return  # No item selected
-
-    # Update the selected row with the edited data
     tree.item(
         selected_item, values=["", medication, dosage, frequency, start_date, end_date]
     )
-
-    # Close the entry window
     close_entry_window(entry_frame)
 
 
@@ -211,21 +150,6 @@ root.minsize(width=1200, height=600)
 # Create a main frame for the table and sidebar
 main_frame = ttk.Frame(root)
 main_frame.pack(fill="both", expand=True)
-
-
-def switch_to_home():
-    # TODO: Implement the "Home" button functionality here
-    pass
-
-
-def switch_to_schedule():
-    # TODO Implement the "View 2" button functionality here
-    pass
-
-
-def switch_to_history():
-    # TODO Implement the "View 3" button functionality here
-    pass
 
 
 #############################################################################################################
@@ -250,6 +174,21 @@ def set_active_label(label):
         active_label.configure(style="Sidebar.TLabel")
     active_label = label
     active_label.configure(style="Active.TLabel")
+
+
+def switch_to_home():
+    # TODO: Implement the "Home" button functionality here
+    pass
+
+
+def switch_to_schedule():
+    # TODO Implement the "View 2" button functionality here
+    pass
+
+
+def switch_to_history():
+    # TODO Implement the "View 3" button functionality here
+    pass
 
 
 # Create the sidebar frame
@@ -346,7 +285,7 @@ meds_frame.pack(side="left", fill="both", expand=True)
 #############################################################################################################
 # Table Title + Add button
 #############################################################################################################
-# TODO
+
 # Create a frame above the table to hold title + button
 table_title_frame = ttk.Frame(meds_frame, padding=(10, 5), style="TableTitle.TFrame")
 table_title_frame.pack(side="top", fill="x")
@@ -367,12 +306,21 @@ ttk.Style().configure(
 
 table_title.pack(side="left", fill="none", expand=False)
 
+# Fields for a new medication entry
+new_medication_fields = {
+    "Medication": "",
+    "Dosage": "",
+    "Frequency": "",
+    "Start Date": "",
+    "End Date": "",
+}
+
 # Create a button for adding an entry
 add_entry_button = ttk.Button(
     table_title_frame,
     text="Add Medication +",
     style="Add.TButton",
-    command=open_add_window,
+    command=add_new_medication,
     padding=(50, 5),
 )
 
@@ -406,6 +354,14 @@ ttk.Style().configure(
 #############################################################################################################
 
 
+# Define a generic sorting function
+def sort_by_column(column_name):
+    data = [(tree.set(item, column_name), item) for item in tree.get_children("")]
+    data.sort()
+    for i, item in enumerate(data):
+        tree.move(item[1], "", i)
+
+
 # Create a frame to contain the treeview and scrollbar
 tree_frame = ttk.Frame(meds_frame, style="MedsTable.TFrame", padding=(10, 0, 10, 0))
 tree_frame.pack(side="top", fill="both")
@@ -413,7 +369,8 @@ tree_frame.pack(side="top", fill="both")
 
 ttk.Style().configure("MedsTable.TFrame", background="white")
 
-# Create a Treeview widget
+
+# Create a Treeview widget (a table)
 tree = ttk.Treeview(
     tree_frame,
     columns=("Select", "Medication", "Dosage", "Frequency", "Start Date", "End Date"),
@@ -450,7 +407,6 @@ ttk.Style().configure(
     padding=(5, 5),
 )
 
-
 # Define column headers
 tree.heading("Select", text="", anchor="w")
 tree.heading("Medication", text="Medication", anchor="w")
@@ -477,54 +433,16 @@ vsb = ttk.Scrollbar(
 tree.configure(yscrollcommand=vsb.set)
 
 
+# Associate sorting functions with column headers
+tree.heading("Medication", command=lambda: sort_by_column("Medication"))
+tree.heading("Dosage", command=lambda: sort_by_column("Dosage"))
+tree.heading("Frequency", command=lambda: sort_by_column("Frequency"))
+tree.heading("Start Date", command=lambda: sort_by_column("Start Date"))
+tree.heading("End Date", command=lambda: sort_by_column("End Date"))
+
 # Pack the treeview and scrollbar
 tree.pack(side="left", fill="both", expand=True)
 vsb.pack(side="right", fill="both")
-
-
-# Define sorting functions
-def sort_by_medication():
-    data = [(tree.set(item, "Medication"), item) for item in tree.get_children("")]
-    data.sort()
-    for i, item in enumerate(data):
-        tree.move(item[1], "", i)
-
-
-def sort_by_dosage():
-    data = [(tree.set(item, "Dosage"), item) for item in tree.get_children("")]
-    data.sort()
-    for i, item in enumerate(data):
-        tree.move(item[1], "", i)
-
-
-def sort_by_frequency():
-    data = [(tree.set(item, "Frequency"), item) for item in tree.get_children("")]
-    data.sort()
-    for i, item in enumerate(data):
-        tree.move(item[1], "", i)
-
-
-def sort_by_start_date():
-    data = [(tree.set(item, "Start Date"), item) for item in tree.get_children("")]
-    data.sort()
-    for i, item in enumerate(data):
-        tree.move(item[1], "", i)
-
-
-def sort_by_end_date():
-    data = [(tree.set(item, "End Date"), item) for item in tree.get_children("")]
-    data.sort()
-    for i, item in enumerate(data):
-        tree.move(item[1], "", i)
-
-
-# Associate sorting functions with column headers
-tree.heading("Medication", command=sort_by_medication)
-tree.heading("Dosage", command=sort_by_dosage)
-tree.heading("Frequency", command=sort_by_frequency)
-tree.heading("Start Date", command=sort_by_start_date)
-tree.heading("End Date", command=sort_by_end_date)
-
 
 #############################################################################################################
 # Bottom Buttons
@@ -550,9 +468,19 @@ edit_button.pack(side="left", fill="none")
 #############################################################################################################
 # Sample Data Generation
 #############################################################################################################
+
+
 # Function to similar data entry
-def generate_valid_entry():
-    medication = "Medication"  # Replace with a proper noun
+def int_to_base26(num):
+    string = ""
+    while num > 0:
+        num, remainder = divmod(num - 1, 26)
+        string = chr(65 + remainder) + string
+    return string
+
+
+def generate_valid_entry(index):
+    medication = f"Medication {int_to_base26(index)}"
     dosage = f"{uniform(0.01, 500):.1f} mg"
     frequency = f"{randint(1, 5)}x / Day"
 
@@ -570,10 +498,12 @@ def generate_valid_entry():
 
 
 # Insert x generated entries with specified formatting
-for _ in range(50):
-    entry_data = generate_valid_entry()
-    entry_data[1] += f" {_ + 1}"
+for i in range(1, 51):  # Starting from 1 to avoid empty medication name
+    entry_data = generate_valid_entry(i)
     tree.insert("", "end", values=entry_data, tags=("editable",))
 
 
+#############################################################################################################
+# Main Loop
+#############################################################################################################
 root.mainloop()
