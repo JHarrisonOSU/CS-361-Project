@@ -5,11 +5,11 @@
 # Assignment: Term Project
 ##########################################################################################################
 
-import tkinter as tk
 import requests
+import re
 import zmq
 import json
-import threading
+import tkinter as tk
 from tkinter import ttk, Frame, font, messagebox, simpledialog
 from random import randint, uniform
 from datetime import datetime, timedelta
@@ -38,19 +38,30 @@ active_user = ""
 key = "5bb6052bd308f2b5"
 medication_data = []
 
+# Get current date and next day, format to strings
+current_date = datetime.today()
+current_date_str = current_date.strftime("%d/%m/%Y")
+next_day = current_date + timedelta(days=1)
+next_day_str = next_day.strftime("%d/%m/%Y")
+
 try:
     # Try to open the file and load the data
     with open("user_data.txt", "r") as file:
         # Load encrpyed save data, send request for decode
         encrypted_str = file.read()
-        print(encrypted_str)
-        decrpyt_req = (encrypted_str, key, "decode")
-        print(decrpyt_req)
-        socket.send_pyobj(decrpyt_req)
 
-        # Convert decrypted save data back to dictionary, load into program
-        decrypted_str = socket.recv_string()
-        users = json.loads(decrypted_str)
+        if encrypted_str != "":
+            decrpyt_req = (encrypted_str, key, "decode")
+            socket.send_pyobj(decrpyt_req)
+
+            # Convert decrypted save data back to dictionary, load into program
+            decrypted_str = socket.recv_string()
+            users = json.loads(decrypted_str)
+        else:
+            users = {}
+            # Optionally, write the empty dictionary to the file
+            with open("user_data.txt", "w") as file:
+                json.dump(users, file)
 
 except FileNotFoundError:
     # If the file does not exist, create an empty dictionary
@@ -66,23 +77,8 @@ except FileNotFoundError:
 #############################################################################################################
 
 ###########################################
-# Generic
+# Generic Functions
 ###########################################
-
-
-# Function to save data on app closure
-def on_close():
-    with open("user_data.txt", "w") as file:
-        save_medication_data()
-        data_str = json.dumps(users)
-        encrypt_req = (data_str, key, "encode")
-        socket.send_pyobj(encrypt_req)
-
-        encrypted_str = socket.recv_string()
-        file.write(encrypted_str)
-
-    # Destroy the window after saving the data
-    root.destroy()
 
 
 # Function to center a frame within the screen
@@ -101,8 +97,13 @@ def center_app(frame):
 
 
 # Function to close a particular frame, called by add_entry and update_entry_submit
-def close_window(entry_frame):
-    entry_frame.destroy()
+def close_window(frame):
+    frame.destroy()
+
+
+###########################################
+# Popup windows
+###########################################
 
 
 # Function to spawn data entry popup window
@@ -118,37 +119,115 @@ def open_entry_window(
     )
     entry_frame["padding"] = (10, 10)
 
-    # Create a title for the popup form
-    window_label = ttk.Label(entry_frame, text=title, style="PopupTitle.TLabel")
-    window_label.grid(row=0, column=0, columnspan=2, padx=5, pady=10)
+    first_field_set = False  # Flag to check if the first field is set
 
     # Populate the form fields and values via iterating through the passed dict
     entries = {}
+    num_columns = 2
     for i, (field, value) in enumerate(fields.items()):
-        label = ttk.Label(entry_frame, text=f"{field}:")
-        entry = ttk.Entry(entry_frame)
-        entry.insert(0, value)
-        entries[field] = entry
+        if field in ["Dosage Unit", "Frequency Options"]:
+            num_columns = 3
+            combobox = ttk.Combobox(entry_frame, width=10, state="readonly")
+            combobox.grid(row=i, column=2, padx=0, pady=5, sticky="w")
+            if field == "Dosage Unit":
+                combobox["values"] = ["mg", "mcg", "mL", "drops"]
+            else:  # field == "Frequency Option"
+                combobox["values"] = ["Daily", "Weekly", "As Needed"]
+            combobox.set(value)
+            entries[field] = combobox
+        else:
+            label = ttk.Label(entry_frame, text=f"{field}:")
+            label.grid(row=i + 1, column=0, padx=5, pady=5, sticky="w")
 
-        # Place them into a tk grid
-        label.grid(row=i + 1, column=0, padx=5, pady=5, sticky="w")
-        entry.grid(row=i + 1, column=1, padx=5, pady=5)
+            entry = ttk.Entry(entry_frame)
+            entry.insert(0, value)
+            entry.grid(row=i + 1, column=1, padx=0, pady=5, sticky="w")
+
+            entries[field] = entry
+
+            # Set focus to the first entry field
+            if not first_field_set:
+                entry.focus_set()
+                first_field_set = True
+
+    # Create a title for the popup form
+    window_label = ttk.Label(entry_frame, text=title, style="PopupTitleA.TLabel")
+    window_label.grid(
+        row=0, column=0, columnspan=num_columns, padx=5, pady=10, sticky="ew"
+    )
+
+    # Frame for buttons
+    button_frame = ttk.Frame(entry_frame)
+    button_frame.grid(
+        row=len(fields) + 2, column=0, columnspan=num_columns, pady=10, sticky="ew"
+    )
 
     # Create cancel and submit buttons, attaching the appropriate action command
     submit_button = ttk.Button(
-        entry_frame, text="Submit", command=lambda: submit_action(entry_frame, entries)
+        button_frame, text="Submit", command=lambda: submit_action(entry_frame, entries)
     )
-    cancel_button = ttk.Button(
-        entry_frame, text="Cancel", command=lambda: close_window(entry_frame)
+    cancel_button_entry = ttk.Button(
+        button_frame, text="Cancel", command=lambda: close_window(entry_frame)
     )
 
-    # Position the buttons in the grid
-    cancel_button.grid(row=len(fields) + 1, column=1, padx=30, pady=10)
-    submit_button.grid(row=len(fields) + 1, column=0, padx=5, pady=10)
+    # Position the buttons in the frame
+    submit_button.pack(side="left", padx=10)
+    cancel_button_entry.pack(side="right", padx=10)
+
+
+def delete_confirm_window():
+    selected_item = meds_tree.selection()
+    if not selected_item:
+        return  # No item selected
+
+    confirm_frame = ttk.Frame(meds_frame, style="Popup.TFrame")
+    confirm_frame.place(
+        relx=0.5,
+        rely=0.5,
+        anchor="center",  # Position it to center of main window (not sidebar)
+        relheight=0.4,
+        relwidth=0.55,
+    )
+    confirm_frame["padding"] = (5, 5)
+
+    # Create a title for the popup frame
+    title_txt = "Are you sure you want to delete the following medication?"
+    window_label = ttk.Label(
+        confirm_frame, text=title_txt, style="PopupTitleB.TLabel", wraplength=450
+    )
+    window_label.pack(side="top", pady=(5, 10))
+
+    # Warning prompt
+    medication_name = meds_tree.item(selected_item, "values")[
+        1
+    ]  # Assuming the medication name is in the 2nd field
+    bold_font = font.Font(family="Helvetica", size=12, weight="bold")
+    warning_label = ttk.Label(
+        confirm_frame,
+        text=f"{medication_name}",
+        font=bold_font,
+    )
+    warning_label.pack(side="top", pady=(0, 0))
+
+    # Frame for buttons
+    button_frame = ttk.Frame(confirm_frame)
+    button_frame.pack(side="bottom")
+
+    # Create cancel and submit buttons, attaching the appropriate action command
+    confirm_button = ttk.Button(
+        button_frame, text="Delete", command=lambda: delete_entry_submit(confirm_frame)
+    )
+    cancel_button = ttk.Button(
+        button_frame, text="Cancel", command=lambda: close_window(confirm_frame)
+    )
+
+    # Position the buttons in the frame
+    confirm_button.pack(side="left", padx=10)
+    cancel_button.pack(side="right", padx=10)
 
 
 ###########################################
-# Login
+# Login Functions
 ###########################################
 
 
@@ -166,7 +245,7 @@ def verify_login(username, password):
         # messagebox.showinfo("Login Successful", "You are logged in!")
         active_user = username
         load_medication_data()
-        login_frame.place_forget()
+        login_frame_bg.place_forget()
     else:
         messagebox.showerror("Login Failed", f"Incorrect password for {username}")
 
@@ -222,52 +301,8 @@ def show_create_user_popup():
     open_entry_window("Create User", fields, submit_create_user, main_frame)
 
 
-# Function to create a login frame
-def create_login_frame(parent):
-    # Create the frame as a child of the parent frame
-    login_frame = tk.Frame(parent)
-
-    # Application title
-    title_label = tk.Label(login_frame, text="MedList", font=("Arial", 24, "italic"))
-    title_label.pack(pady=10)
-
-    # User selection dropdown
-    user_label = tk.Label(login_frame, text="Select User:")
-    user_label.pack()
-    user_dropdown = ttk.Combobox(login_frame)
-    user_dropdown["values"] = list(users.keys())
-    if users:
-        first_user = next(iter(users))  # Get the first key in the dictionary
-        user_dropdown.set(first_user)  # Set the first user as the current value
-    user_dropdown.pack(pady=5)
-
-    # Password entry
-    password_label = tk.Label(login_frame, text="Password:")
-    password_label.pack()
-    password_entry = tk.Entry(login_frame, show="*")
-    password_entry.pack(pady=5)
-
-    login_button = tk.Button(
-        login_frame,
-        text="Login",
-        command=lambda: verify_login(user_dropdown.get(), password_entry.get()),
-    )
-    login_button.pack(pady=10)
-
-    # Create new user button
-    new_user_button = tk.Button(
-        login_frame, text="Create New User", command=show_create_user_popup
-    )
-    new_user_button.pack(pady=10)
-
-    # Place the login frame inside the parent frame
-    login_frame.place(in_=parent, x=0, y=0, relwidth=1, relheight=1)
-
-    return login_frame, user_dropdown
-
-
 ###########################################
-# Sidebar
+# Sidebar Functions
 ###########################################
 
 
@@ -293,22 +328,15 @@ def set_active_label(label):
 
 
 def switch_to_home():
-    # TODO: Implement the "Home" button functionality here
-    pass
+    meds_frame.tkraise()
 
 
-def switch_to_schedule():
-    # TODO Implement the "View 2" button functionality here
-    pass
-
-
-def switch_to_history():
-    # TODO Implement the "View 3" button functionality here
-    pass
+def switch_to_search():
+    search_frame.tkraise()
 
 
 ###########################################
-# Medication Table - Loading and Sorting
+# Table load/sort Functions
 ###########################################
 
 
@@ -322,43 +350,73 @@ def load_medication_data():
 
         # Populate the table with data from medication_data
         for data_row in medication_data:
-            tree.insert("", "end", values=data_row)
+            meds_tree.insert("", "end", values=data_row)
 
 
 def save_medication_data():
     global medication_data
     global active_user
 
-    for item in tree.get_children():
+    medication_data = []
+
+    for item in meds_tree.get_children():
         data_row = [
-            tree.item(item, "values")[col] for col in range(len(tree["columns"]))
+            meds_tree.item(item, "values")[col]
+            for col in range(len(meds_tree["columns"]))
         ]
         medication_data.append(data_row)
 
-    users[active_user]["medication_data"] = medication_data
+    if medication_data:
+        users[active_user]["medication_data"] = medication_data
+    else:
+        users[active_user]["medication_data"] = ""
+
+
+# Function to save data on app closure
+def on_close():
+    with open("user_data.txt", "w") as file:
+        if active_user != "":
+            save_medication_data()
+        data_str = json.dumps(users)
+
+        if data_str:
+            encrypt_req = (data_str, key, "encode")
+            socket.send_pyobj(encrypt_req)
+
+            encrypted_str = socket.recv_string()
+            file.write(encrypted_str)
+
+    # Destroy the window after saving the data
+    root.destroy()
 
 
 # Sorting function for table
 def sort_by_column(column_name):
-    data = [(tree.set(item, column_name), item) for item in tree.get_children("")]
+    data = [
+        (meds_tree.set(item, column_name), item) for item in meds_tree.get_children("")
+    ]
     data.sort()
     for i, item in enumerate(data):
-        tree.move(item[1], "", i)
+        meds_tree.move(item[1], "", i)
 
 
 ###########################################
-# Medication Table - Modifying
+# Table - Modify Functions
 ###########################################
 
 
-# Function to call open_entry_window in add mode
 def add_new_medication():
+    global current_date
+    global next_day
+
     # Fields for a new medication entry
     fields = {
         "Medication": "",
         "Dosage": "",
+        "Dosage Unit": "mg",  # Default
         "Frequency": "",
-        "Start Date": "",
+        "Frequency Options": "Daily",  # Default
+        "Start Date": f"{current_date_str}",
         "End Date": "",
     }
 
@@ -372,15 +430,24 @@ def add_new_medication():
 
 # Function to call open_entry_window in update mode
 def edit_selected_medication():
-    selected_item = tree.selection()
+    selected_item = meds_tree.selection()
     if not selected_item:
         return  # No item selected
 
-    values = tree.item(selected_item, "values")
+    values = meds_tree.item(selected_item, "values")
+
+    # Dosage and unit are separated by a space
+    dosage, dosage_unit = values[2].split(
+        maxsplit=1
+    )  # splits into two parts at the first space
+    frequency, frequency_option = values[3].split(maxsplit=1)  # same for frequency
+
     fields = {
         "Medication": values[1],
-        "Dosage": values[2],
-        "Frequency": values[3],
+        "Dosage": dosage,
+        "Dosage Unit": dosage_unit,
+        "Frequency": frequency,
+        "Frequency Options": frequency_option,
         "Start Date": values[4],
         "End Date": values[5],
     }
@@ -393,57 +460,15 @@ def edit_selected_medication():
     )
 
 
-# Function to spawn data entry popup window
-def open_entry_window(
-    title: str, fields: dict[str:Any], submit_action: Callable, container_frame: Frame
-):
-    # Create a new frame popup form to allow user's to enter/edit data
-    entry_frame = ttk.Frame(container_frame, style="Popup.TFrame")
-    entry_frame.place(
-        relx=0.5,
-        rely=0.5,
-        anchor="center",  # Position it to center of main window (not sidebar)
-    )
-    entry_frame["padding"] = (10, 10)
-
-    # Create a title for the popup form
-    window_label = ttk.Label(entry_frame, text=title, style="PopupTitle.TLabel")
-    window_label.grid(row=0, column=0, columnspan=2, padx=5, pady=10)
-
-    # Populate the form fields and values via iterating through the passed dict
-    entries = {}
-    for i, (field, value) in enumerate(fields.items()):
-        label = ttk.Label(entry_frame, text=f"{field}:")
-        entry = ttk.Entry(entry_frame)
-        entry.insert(0, value)
-        entries[field] = entry
-
-        # Place them into a tk grid
-        label.grid(row=i + 1, column=0, padx=5, pady=5, sticky="w")
-        entry.grid(row=i + 1, column=1, padx=5, pady=5)
-
-    # Create cancel and submit buttons, attaching the appropriate action command
-    submit_button = ttk.Button(
-        entry_frame, text="Submit", command=lambda: submit_action(entry_frame, entries)
-    )
-    cancel_button = ttk.Button(
-        entry_frame, text="Cancel", command=lambda: close_window(entry_frame)
-    )
-
-    # Position the buttons in the grid
-    cancel_button.grid(row=len(fields) + 1, column=1, padx=30, pady=10)
-    submit_button.grid(row=len(fields) + 1, column=0, padx=5, pady=10)
-
-
 # Function to add a new row to table, called by open_entry_window()
 def add_entry_submit(entry_frame, entries):
     medication = entries["Medication"].get()
-    dosage = entries["Dosage"].get()
-    frequency = entries["Frequency"].get()
+    dosage = entries["Dosage"].get() + " " + entries["Dosage Unit"].get()
+    frequency = entries["Frequency"].get() + " " + entries["Frequency Options"].get()
     start_date = entries["Start Date"].get()
     end_date = entries["End Date"].get()
 
-    tree.insert(
+    meds_tree.insert(
         "", "end", values=["", medication, dosage, frequency, start_date, end_date]
     )
     close_window(entry_frame)
@@ -451,20 +476,103 @@ def add_entry_submit(entry_frame, entries):
 
 # Function to update a row's data, called by open_entry_window on submit
 def update_entry_submit(entry_frame, entries):
-    selected_item = tree.selection()
+    selected_item = meds_tree.selection()
     if not selected_item:
         return  # No item selected
 
     medication = entries["Medication"].get()
-    dosage = entries["Dosage"].get()
-    frequency = entries["Frequency"].get()
+    dosage = entries["Dosage"].get() + " " + entries["Dosage Unit"].get()
+    frequency = entries["Frequency"].get() + " " + entries["Frequency Options"].get()
     start_date = entries["Start Date"].get()
     end_date = entries["End Date"].get()
 
-    tree.item(
+    meds_tree.item(
         selected_item, values=["", medication, dosage, frequency, start_date, end_date]
     )
     close_window(entry_frame)
+
+
+def delete_entry_submit(confirm_frame):
+    selected_item = meds_tree.selection()
+    if not selected_item:
+        return  # No item selected
+    else:
+        # Logic to delete the selected item from the meds_tree
+        meds_tree.delete(selected_item)
+
+    # Close the confirmation window
+    close_window(confirm_frame)
+
+
+###########################################
+# Search API Functions
+###########################################
+
+
+def search_medications():
+    query = search_entry.get().strip()
+    url = f"https://api.fda.gov/drug/label.json?search=openfda.brand_name:{query}&limit=40"
+    print("url")
+    response = requests.get(url)
+    data = response.json()
+
+    # Clear previous search results
+    results_treeview.delete(
+        *results_treeview.get_children()
+    )  
+
+    if "results" in data:
+        added_medications = set()
+        for item in data["results"]:
+            brand_name = item.get("openfda", {}).get("brand_name", [None])[0]
+            if brand_name and brand_name not in added_medications:
+                results_treeview.insert("", tk.END, values=[brand_name])
+                added_medications.add(brand_name)
+    else:
+        results_treeview.insert("", tk.END, values=["No results found"])
+
+
+def lookup_medication_details():
+    selected_item = results_treeview.selection()
+    if not selected_item:
+        return
+
+    med_name = results_treeview.item(selected_item[0], "values")[0].replace(" ", "+")
+    url = f'https://api.fda.gov/drug/label.json?search=openfda.brand_name:"{med_name}"&limit=1'
+    response = requests.get(url)
+    data = response.json()
+
+    data_str = format_medication_data(data)
+    details_text.config(state=tk.NORMAL)
+    details_text.delete(1.0, tk.END)
+    details_text.insert(tk.END, data_str)
+    details_text.config(state=tk.DISABLED)
+
+
+def extract_properties(data, props):
+    result = data.get("results", [{}])[0]
+    return {
+        prop.replace("_", " ").title(): result.get(prop, [""])[0]
+        for prop in props
+        if prop in result
+    }
+
+
+def format_medication_data(data):
+    data_str = ""
+    desired_props = [
+        "purpose",
+        "indications_and_usage",
+        "warnings",
+        "dosage_and_administration",
+    ]
+    props_dictionary = extract_properties(data, desired_props)
+
+    for prop, value in props_dictionary.items():
+        formatted_prop = prop.replace("_", " ").upper()
+        formatted_text = re.sub(r"(?<=\)\s|\.\s)([A-Z]|\d)", r"\n\n\1", value)
+        data_str += f"\n{formatted_prop}:\n{formatted_text}\n"
+    return data_str
 
 
 #############################################################################################################
@@ -501,27 +609,30 @@ sidebar_frame = ttk.Frame(main_frame, width=200, style="Sidebar.TFrame")
 # Add labels as buttons in the sidebar for navigation
 app_name_label = ttk.Label(sidebar_frame, text="MedList", style="AppName.TLabel")
 home_button = ttk.Label(sidebar_frame, text="Home", style="Sidebar.TLabel")
-schedule_button = ttk.Label(
-    sidebar_frame, text="Medication Schedule", style="Sidebar.TLabel"
-)
-history_button = ttk.Label(
-    sidebar_frame, text="Medication History", style="Sidebar.TLabel"
-)
+search_button = ttk.Label(sidebar_frame, text="Medication Info", style="Sidebar.TLabel")
 
 # Pack the sidebar elements into the grid
 app_name_label.grid(row=0, padx=0, pady=0)
 home_button.grid(row=1, padx=10, pady=1, sticky="w")
-schedule_button.grid(row=2, padx=10, pady=1, sticky="w")
-history_button.grid(row=3, padx=10, pady=1, sticky="w")
+search_button.grid(row=2, padx=10, pady=1, sticky="w")
+# history_button.grid(row=3, padx=10, pady=1, sticky="w")
 
 # Bind events for mouse hover actions
 home_button.bind("<Enter>", on_hover_enter)
-schedule_button.bind("<Enter>", on_hover_enter)
-history_button.bind("<Enter>", on_hover_enter)
+search_button.bind("<Enter>", on_hover_enter)
 
 home_button.bind("<Leave>", on_hover_leave)
-schedule_button.bind("<Leave>", on_hover_leave)
-history_button.bind("<Leave>", on_hover_leave)
+search_button.bind("<Leave>", on_hover_leave)
+
+# Bind click events to the labels using lambda functions
+# Bind click events to the labels using lambda functions
+home_button.bind(
+    "<Button-1>", lambda e: (set_active_label(home_button), switch_to_home())
+)
+search_button.bind(
+    "<Button-1>", lambda e: (set_active_label(search_button), switch_to_search())
+)
+
 
 # Style for the sidebar frame
 ttk.Style().configure("Sidebar.TFrame", background="#333")
@@ -549,7 +660,7 @@ ttk.Style().configure(
     "Hover.TLabel",
     font=("Helvetica", 15, "bold"),
     padding=(10, 5, 40, 5),
-    background="#444",
+    background="#008756",
     foreground="white",
     width=20,
     anchor="w",
@@ -559,7 +670,7 @@ ttk.Style().configure(
     "Active.TLabel",
     font=("Helvetica", 15, "bold"),
     padding=(10, 5, 40, 5),
-    background="#444",  # Active label background color
+    background="#04B173",  # Active label background color
     foreground="white",  # Active label text color
     width=20,
     anchor="w",
@@ -588,37 +699,31 @@ meds_frame.pack(side="left", fill="both", expand=True)
 #############################################################################################################
 
 # Create a frame above the table to hold title + button
-table_title_frame = ttk.Frame(meds_frame, padding=(10, 5), style="TableTitle.TFrame")
-table_title_frame.pack(side="top", fill="x")
+meds_table_title_frame = ttk.Frame(
+    meds_frame, padding=(10, 5), style="TableTitle.TFrame"
+)
+meds_table_title_frame.pack(side="top", fill="x")
 
 # Create a label for titling the table
-table_title = ttk.Label(table_title_frame, text="Medications", style="Title.TLabel")
+meds_table_title = ttk.Label(
+    meds_table_title_frame, text="Medications", style="MedsTitle.TLabel"
+)
 
-ttk.Style().configure("TableTitle.TFrame", background="white")
+ttk.Style().configure("MedsTableTitle.TFrame", background="white")
 ttk.Style().configure(
-    "Title.TLabel",
+    "MedsTitle.TLabel",
     font=("Helvetica", 23, "bold"),
     padding=(5, 5, 40, 5),
-    background="white",
     foreground="black",  # Active label text color
     width=20,
     anchor="w",
 )
 
-table_title.pack(side="left", fill="none", expand=False)
-
-# Fields for a new medication entry
-new_medication_fields = {
-    "Medication": "",
-    "Dosage": "",
-    "Frequency": "",
-    "Start Date": "",
-    "End Date": "",
-}
+meds_table_title.pack(side="left", fill="none", expand=False)
 
 # Create a button for adding an entry
 add_entry_button = ttk.Button(
-    table_title_frame,
+    meds_table_title_frame,
     text="Add Medication +",
     style="Add.TButton",
     command=add_new_medication,
@@ -640,7 +745,7 @@ ttk.Style().configure("Popup.TFrame", borderwidth=5, relief="ridge")
 # Design a title style for the popup frames
 
 ttk.Style().configure(
-    "PopupTitle.TLabel",
+    "PopupTitleA.TLabel",
     font=("Helvetica", 23, "bold"),
     padding=(10, 5, 10, 5),
     foreground="black",  # Active label text color
@@ -648,19 +753,19 @@ ttk.Style().configure(
     anchor="center",
 )
 
+ttk.Style().configure(
+    "PopupTitleB.TLabel",
+    font=("Helvetica", 15, "bold"),
+    padding=(10, 5, 10, 5),
+    foreground="black",  # Active label text color
+    anchor="center",
+)
+
 # Design a field label style for the popup frames
 
 #############################################################################################################
-# Table
+# Table Display
 #############################################################################################################
-
-
-# Define a generic sorting function
-def sort_by_column(column_name):
-    data = [(tree.set(item, column_name), item) for item in tree.get_children("")]
-    data.sort()
-    for i, item in enumerate(data):
-        tree.move(item[1], "", i)
 
 
 # Create a frame to contain the treeview and scrollbar
@@ -672,7 +777,7 @@ ttk.Style().configure("MedsTable.TFrame", background="white")
 
 
 # Create a Treeview widget (a table)
-tree = ttk.Treeview(
+meds_tree = ttk.Treeview(
     tree_frame,
     columns=("Select", "Medication", "Dosage", "Frequency", "Start Date", "End Date"),
     show="headings",
@@ -681,7 +786,7 @@ tree = ttk.Treeview(
     style="Treeview",
 )
 
-# Configure the style for the treeview
+# Style treeview
 ttk.Style().configure(
     "Treeview",
     background="white",
@@ -709,44 +814,44 @@ ttk.Style().configure(
 )
 
 # Define column headers
-tree.heading("Select", text="", anchor="w")
-tree.heading("Medication", text="Medication", anchor="w")
-tree.heading("Dosage", text="Dosage", anchor="w")
-tree.heading("Frequency", text="Frequency", anchor="w")
-tree.heading("Start Date", text="Start Date", anchor="w")
-tree.heading("End Date", text="End Date", anchor="w")
+meds_tree.heading("Select", text="", anchor="w")
+meds_tree.heading("Medication", text="Medication", anchor="w")
+meds_tree.heading("Dosage", text="Dosage", anchor="w")
+meds_tree.heading("Frequency", text="Frequency", anchor="w")
+meds_tree.heading("Start Date", text="Start Date", anchor="w")
+meds_tree.heading("End Date", text="End Date", anchor="w")
 
 # Configure column widthsmin
-tree.column("Select", width=30, minwidth=30, stretch=False)
-tree.column("Medication", width=150, minwidth=150)
-tree.column("Dosage", width=100, minwidth=100)
-tree.column("Frequency", width=100, minwidth=100)
-tree.column("Start Date", width=100, minwidth=100)
-tree.column("End Date", width=100, minwidth=100)
+meds_tree.column("Select", width=30, minwidth=30, stretch=False)
+meds_tree.column("Medication", width=150, minwidth=150)
+meds_tree.column("Dosage", width=100, minwidth=100)
+meds_tree.column("Frequency", width=100, minwidth=100)
+meds_tree.column("Start Date", width=100, minwidth=100)
+meds_tree.column("End Date", width=100, minwidth=100)
 
 # Create a vertical scrollbar and attach it to the table
 vsb = ttk.Scrollbar(
     tree_frame,
     orient="vertical",
-    command=tree.yview,
+    command=meds_tree.yview,
     style="Custom.Vertical.TScrollbar",
 )
-tree.configure(yscrollcommand=vsb.set)
+meds_tree.configure(yscrollcommand=vsb.set)
 
 
 # Associate sorting functions with column headers
-tree.heading("Medication", command=lambda: sort_by_column("Medication"))
-tree.heading("Dosage", command=lambda: sort_by_column("Dosage"))
-tree.heading("Frequency", command=lambda: sort_by_column("Frequency"))
-tree.heading("Start Date", command=lambda: sort_by_column("Start Date"))
-tree.heading("End Date", command=lambda: sort_by_column("End Date"))
+meds_tree.heading("Medication", command=lambda: sort_by_column("Medication"))
+meds_tree.heading("Dosage", command=lambda: sort_by_column("Dosage"))
+meds_tree.heading("Frequency", command=lambda: sort_by_column("Frequency"))
+meds_tree.heading("Start Date", command=lambda: sort_by_column("Start Date"))
+meds_tree.heading("End Date", command=lambda: sort_by_column("End Date"))
 
 # Pack the treeview and scrollbar
-tree.pack(side="left", fill="both", expand=True)
+meds_tree.pack(side="left", fill="both", expand=True)
 vsb.pack(side="right", fill="both")
 
 #############################################################################################################
-# Bottom Buttons
+# Table Bottom Buttons
 #############################################################################################################
 
 
@@ -761,57 +866,162 @@ edit_button = ttk.Button(
     style="Edit.TButton",
 )
 
-
 ttk.Style().configure("Edit.TButton", font=("Helvetica", 14, "bold"), padding=(50, 5))
-edit_button.pack(side="left", fill="none")
+edit_button.pack(side="left")
 
+
+# Create "Delete Selected Medication" button
+delete_button = ttk.Button(
+    table_bottom_frame,
+    text="Delete Selected Medication",
+    command=delete_confirm_window,
+    style="Delete.TButton",
+)
+
+
+ttk.Style().configure("Delete.TButton", font=("Helvetica", 14, "bold"), padding=(50, 5))
+delete_button.pack(side="right")
 
 #############################################################################################################
-# Sample Data Generation
+# Medication Search Frame
 #############################################################################################################
 
+search_frame = ttk.Frame(main_frame, style="SearchFrame.TFrame")
+ttk.Style().configure(style="SearchFrame.TFrame")
 
-# def int_to_base26(num):
-#     string = ""
-#     while num > 0:
-#         num, remainder = divmod(num - 1, 26)
-#         string = chr(65 + remainder) + string
-#     return string
+search_frame.place(
+    in_=meds_frame, relx=0.5, rely=0.5, anchor="center", relwidth=1, relheight=1
+)
+
+# Create, configure and pack title frame within search frame
+search_table_title_frame = ttk.Frame(
+    search_frame, padding=(10, 5), style="SearchTableTitle.TFrame"
+)
+ttk.Style().configure("SearchTableTitle.TFrame")
+search_table_title_frame.pack(side="top", fill="x")
+
+# Create, style and pack title label
+search_table_title = ttk.Label(
+    search_table_title_frame, text="Medication Search", style="SearchTitle.TLabel"
+)
+ttk.Style().configure(
+    "SearchTitle.TLabel",
+    font=("Helvetica", 23, "bold"),
+    padding=(5, 5, 20, 5),
+    foreground="black",  # Active label text color
+    width=20,
+    anchor="w",
+)
+search_table_title.pack(side="left", fill="none", expand=False)
 
 
-# # Function to simulate data entry
-# def generate_valid_entry(index):
-#     medication = f"Medication {int_to_base26(index)}"
-#     dosage = f"{uniform(0.01, 500):.1f} mg"
-#     frequency = f"{randint(1, 5)}x / Day"
+# Create, style and pack search button
+search_entry_button = ttk.Button(
+    search_table_title_frame,
+    text="Search",
+    style="Search.TButton",
+    command=search_medications,
+)
+ttk.Style().configure("Search.TButton", font=("Helvetica", 13, "bold"), padding=(25, 5))
+search_entry_button.pack(side="right", fill="none", expand=False)
 
-#     start_date = datetime(randint(2022, 2022), randint(1, 12), randint(1, 28))
-#     end_date = start_date + timedelta(days=randint(1, 365))  # Up to 1 year apart
+# Search entry - TTK Entry
+search_entry = ttk.Entry(search_table_title_frame, style="SearchEntry.TEntry", width=50)
+ttk.Style().configure(
+    "SearchEntry.TEntry", font=("Helvetica", 13, "bold"), padding=(13, 5)
+)
+search_entry.pack(side="right", expand=True, padx=10)
 
-#     return [
-#         "",
-#         medication,
-#         dosage,
-#         frequency,
-#         start_date.strftime("%Y/%m/%d"),
-#         end_date.strftime("%Y/%m/%d"),
-#     ]
+# Create and pack results treeview
+results_treeview = ttk.Treeview(
+    search_frame, columns=("Medication"), show="headings", height=10
+)
+results_treeview.heading("Medication", text="Medication")
+results_treeview.pack(side="top", expand=True, fill="both", padx=10, pady=10)
 
+# Create, style and pack lookup button
+lookup_button = ttk.Button(
+    search_frame,
+    style="Details.TButton",
+    text="Lookup Selected Medication Details",
+    command=lookup_medication_details,
+)
+# Style and pack button
+ttk.Style().configure(
+    "Details.TButton", font=("Helvetica", 13, "bold"), padding=(25, 5)
+)
+lookup_button.pack(side="top", pady=20, padx=20)
 
-# # Insert x generated entries with specified formatting
-# for i in range(1, 51):  # Starting from 1 to avoid empty medication name
-#     entry_data = generate_valid_entry(i)
-#     tree.insert("", "end", values=entry_data, tags=("editable",))
+# Create and pack details text widget
+details_text = tk.Text(search_frame, height=20, wrap="word")
+details_text.pack(side="top", fill="both", expand=True, padx=10, pady=10)
+
+# Raise meds frame to ensure its home page of app
+meds_frame.tkraise()
 
 
 #############################################################################################################
 # Login Frame
 #############################################################################################################
 
-login_frame, user_dropdown = create_login_frame(main_frame)
 
-# Start with login frame
-login_frame.tkraise()
+# Create the frame as a child of the main frame and contain all other login elements
+login_frame_bg = ttk.Frame(main_frame, style="LoginBackground.TFrame")
+ttk.Style().configure("LoginBackground.TFrame", background="#04B173")
+
+# Create a child frame to overlay the background
+login_frame = ttk.Frame(login_frame_bg, style="Login.TFrame")
+ttk.Style().configure("Login.TFrame")
+
+login_frame_bg.place(
+    in_=main_frame, relx=0.5, rely=0.5, anchor="center", relwidth=1, relheight=1
+)
+login_frame.place(
+    in_=login_frame_bg,
+    relx=0.5,
+    rely=0.5,
+    anchor="center",
+    relwidth=0.3,
+    relheight=0.95,
+)
+
+# Application title
+title_label = ttk.Label(
+    login_frame, text="MedList", font=("Arial", 48, "italic", "bold")
+)
+title_label.pack(pady=10)
+
+# User selection dropdown
+user_label = ttk.Label(login_frame, text="Select User:", font=("Arial", 11, "bold"))
+user_label.pack()
+
+user_dropdown = ttk.Combobox(login_frame)
+user_dropdown["values"] = list(users.keys())
+if users:
+    first_user = next(iter(users))  # Get the first key in the dictionary
+    user_dropdown.set(first_user)  # Set the first user as the current value
+user_dropdown.pack(pady=5)
+
+# Password entry
+password_label = ttk.Label(login_frame, text="Password:", font=("Arial", 11, "bold"))
+password_label.pack()
+password_entry = ttk.Entry(login_frame, show="*")
+password_entry.pack(pady=5)
+login_button = ttk.Button(
+    login_frame,
+    text="Login",
+    command=lambda: verify_login(user_dropdown.get(), password_entry.get()),
+)
+login_button.pack(pady=10)
+
+# Create new user button
+new_user_button = ttk.Button(
+    login_frame, text="Create New User", command=show_create_user_popup
+)
+new_user_button.pack(pady=10)
+
+# Place the login frame inside the parent frame
+
 
 #############################################################################################################
 # Main Loop

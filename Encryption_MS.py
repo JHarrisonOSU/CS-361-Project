@@ -38,14 +38,14 @@ while True:
         socket.send_string('Error: Invalid command.')       
     """
     if command == "encode":
-        print("\nreceived string to encode: ", data_str)
+        # print("\nreceived string to encode: ", data_str)
         res_string = encode(data_str, key)
-        print("sending encoded string: ", res_string)
+        print("\nsending encoded string: ", res_string)
         socket.send_string(res_string)
     elif command == "decode":
         print("\nreceived string to decode: ", data_str, "with key", key)
         res_string = decode(data_str, key)
-        print("sending decoded string: ", res_string)
+        # print("\nsending decoded string: ", res_string)
         socket.send_string(res_string)
     else:
         socket.send_string("\nError: Invalid command.")
