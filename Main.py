@@ -21,9 +21,9 @@ from PIL import Image, ImageTk
 # ZMQ Socket Setup
 #############################################################################################################
 
-# First create a Context object. This will contain all ZMQ sockets in one process.
+# Context object. This will contain all ZMQ sockets in one process.
 context = zmq.Context()
-# Next create a socket of type REQ (REQUEST)
+# Socket of type REQ (REQUEST)
 socket = context.socket(zmq.REQ)
 # Next connect the socket to the server's endpoint
 # (server @ localhost port 5555, in this case)
@@ -512,14 +512,17 @@ def delete_entry_submit(confirm_frame):
 def search_medications():
     query = search_entry.get().strip()
     url = f"https://api.fda.gov/drug/label.json?search=openfda.brand_name:{query}&limit=40"
-    print("url")
-    response = requests.get(url)
-    data = response.json()
+    print(f"Api request: {url}")
+
+    try:
+        response = requests.get(url, timeout=5)
+        data = response.json()
+    except requests.exceptions.RequestException as e:
+        print("Connection timeout occured.")
+        return
 
     # Clear previous search results
-    results_treeview.delete(
-        *results_treeview.get_children()
-    )  
+    results_treeview.delete(*results_treeview.get_children())
 
     if "results" in data:
         added_medications = set()
@@ -530,23 +533,6 @@ def search_medications():
                 added_medications.add(brand_name)
     else:
         results_treeview.insert("", tk.END, values=["No results found"])
-
-
-def lookup_medication_details():
-    selected_item = results_treeview.selection()
-    if not selected_item:
-        return
-
-    med_name = results_treeview.item(selected_item[0], "values")[0].replace(" ", "+")
-    url = f'https://api.fda.gov/drug/label.json?search=openfda.brand_name:"{med_name}"&limit=1'
-    response = requests.get(url)
-    data = response.json()
-
-    data_str = format_medication_data(data)
-    details_text.config(state=tk.NORMAL)
-    details_text.delete(1.0, tk.END)
-    details_text.insert(tk.END, data_str)
-    details_text.config(state=tk.DISABLED)
 
 
 def extract_properties(data, props):
@@ -573,6 +559,23 @@ def format_medication_data(data):
         formatted_text = re.sub(r"(?<=\)\s|\.\s)([A-Z]|\d)", r"\n\n\1", value)
         data_str += f"\n{formatted_prop}:\n{formatted_text}\n"
     return data_str
+
+
+def lookup_medication_details():
+    selected_item = results_treeview.selection()
+    if not selected_item:
+        return
+
+    med_name = results_treeview.item(selected_item[0], "values")[0].replace(" ", "+")
+    url = f'https://api.fda.gov/drug/label.json?search=openfda.brand_name:"{med_name}"&limit=1'
+    response = requests.get(url)
+    data = response.json()
+
+    data_str = format_medication_data(data)
+    details_text.config(state=tk.NORMAL)
+    details_text.delete(1.0, tk.END)
+    details_text.insert(tk.END, data_str)
+    details_text.config(state=tk.DISABLED)
 
 
 #############################################################################################################
@@ -624,7 +627,6 @@ search_button.bind("<Enter>", on_hover_enter)
 home_button.bind("<Leave>", on_hover_leave)
 search_button.bind("<Leave>", on_hover_leave)
 
-# Bind click events to the labels using lambda functions
 # Bind click events to the labels using lambda functions
 home_button.bind(
     "<Button-1>", lambda e: (set_active_label(home_button), switch_to_home())
@@ -938,6 +940,8 @@ results_treeview = ttk.Treeview(
 )
 results_treeview.heading("Medication", text="Medication")
 results_treeview.pack(side="top", expand=True, fill="both", padx=10, pady=10)
+results_treeview.pack_propagate(False)
+results_treeview.config(height=4)
 
 # Create, style and pack lookup button
 lookup_button = ttk.Button(
@@ -950,7 +954,7 @@ lookup_button = ttk.Button(
 ttk.Style().configure(
     "Details.TButton", font=("Helvetica", 13, "bold"), padding=(25, 5)
 )
-lookup_button.pack(side="top", pady=20, padx=20)
+lookup_button.pack(side="top", pady=5, padx=20)
 
 # Create and pack details text widget
 details_text = tk.Text(search_frame, height=20, wrap="word")
@@ -1019,8 +1023,6 @@ new_user_button = ttk.Button(
     login_frame, text="Create New User", command=show_create_user_popup
 )
 new_user_button.pack(pady=10)
-
-# Place the login frame inside the parent frame
 
 
 #############################################################################################################
